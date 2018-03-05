@@ -6,8 +6,6 @@ LL |     let s_inner: &'a S = &*v.0; //~ ERROR `*v.0` does not live long enough
 LL |     &s_inner.0
 LL | }
    | - borrowed value only lives until here
-   |
-   = note: borrowed value must be valid for lifetime '_#3r...
 
 error: aborting due to previous error
 

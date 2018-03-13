@@ -332,7 +332,8 @@ fn process_predicate<'a, 'gcx, 'tcx>(
                     // make defaulted unit go through the slow path for better warnings,
                     // please remove this when the warnings are removed.
                     !trait_obligation.predicate.skip_binder().self_ty().is_defaulted_unit() &&
-                    selcx.evaluate_obligation_conservatively(&obligation) {
+                    selcx.infcx().predicate_must_hold(obligation.param_env,
+                                                      obligation.predicate) {
                     debug!("selecting trait `{:?}` at depth {} evaluated to holds",
                            data, obligation.recursion_depth);
                     return Ok(Some(vec![]))

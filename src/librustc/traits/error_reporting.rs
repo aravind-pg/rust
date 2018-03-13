@@ -1225,13 +1225,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                 &cleaned_pred
             ).value;
 
-            let obligation = Obligation::new(
-                ObligationCause::dummy(),
-                param_env,
-                cleaned_pred.to_predicate()
-            );
-
-            selcx.evaluate_obligation(&obligation)
+            self.predicate_may_hold(param_env, cleaned_pred.to_predicate())
         })
     }
 

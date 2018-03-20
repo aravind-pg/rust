@@ -22,7 +22,7 @@ use super::project;
 use super::project::{normalize_with_depth, Normalized, ProjectionCacheKey};
 use super::{PredicateObligation, TraitObligation, ObligationCause};
 use super::{ObligationCauseCode, BuiltinDerivedObligation, ImplDerivedObligation};
-use super::{SelectionError, Unimplemented, OutputTypeParameterMismatch};
+use super::{SelectionError, Unimplemented, OutputTypeParameterMismatch, Overflow};
 use super::{ObjectCastObligation, Obligation};
 use super::TraitNotObjectSafe;
 use super::Selection;
@@ -378,6 +378,8 @@ pub enum EvaluationResult {
     /// branch still can't be a part of a minimal one - but does not
     /// re-enable caching.
     EvaluatedToRecur,
+    /// Evaluation caused overflow
+    EvaluatedToOverflow,
     /// Evaluation failed
     EvaluatedToErr,
 }
@@ -390,7 +392,8 @@ impl EvaluationResult {
             EvaluatedToUnknown => true,
 
             EvaluatedToErr |
-            EvaluatedToRecur => false
+            EvaluatedToRecur |
+            EvaluatedToOverflow => false
         }
     }
 
@@ -401,7 +404,8 @@ impl EvaluationResult {
 
             EvaluatedToOk |
             EvaluatedToAmbig |
-            EvaluatedToErr => false,
+            EvaluatedToErr |
+            EvaluatedToOverflow => false,
         }
     }
 }
@@ -411,6 +415,7 @@ impl_stable_hash_for!(enum self::EvaluationResult {
     EvaluatedToAmbig,
     EvaluatedToUnknown,
     EvaluatedToRecur,
+    EvaluatedToOverflow,
     EvaluatedToErr
 });
 
@@ -534,6 +539,7 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
         assert!(!obligation.predicate.has_escaping_regions());
 
         let stack = self.push_stack(TraitObligationStackList::empty(), obligation);
+        // XXX: catch and report overflow error here as well?
         let ret = match self.candidate_from_obligation(&stack)? {
             None => None,
             Some(candidate) => Some(self.confirm_candidate(obligation, candidate)?)
@@ -859,6 +865,7 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
         match self.candidate_from_obligation(stack) {
             Ok(Some(c)) => self.evaluate_candidate(stack, &c),
             Ok(None) => EvaluatedToAmbig,
+            Err(Overflow) => EvaluatedToOverflow,
             Err(..) => EvaluatedToErr
         }
     }
@@ -977,8 +984,12 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
         // Watch out for overflow. This intentionally bypasses (and does
         // not update) the cache.
         let recursion_limit = self.infcx.tcx.sess.recursion_limit.get();
+        // XXX: we haven't done anything about stack.obligation.recursion_depth...
+        // In the canonical query case it's always the default/dummy (i.e. 0, the default
+        // in Obligation::new)
         if stack.obligation.recursion_depth >= recursion_limit {
-            self.infcx().report_overflow_error(&stack.obligation, true);
+            return Err(Overflow);
+            // self.infcx().report_overflow_error(&stack.obligation, true);
         }
 
         // Check the cache. Note that we skolemize the trait-ref

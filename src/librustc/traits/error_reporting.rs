@@ -24,6 +24,7 @@ use super::{
     SelectionContext,
     SelectionError,
     ObjectSafetyViolation,
+    Overflow,
 };
 
 use errors::DiagnosticBuilder;
@@ -643,8 +644,11 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                 }
                                 trait_pred
                             });
-                            if self.predicate_may_hold(obligation.param_env,
-                                                       ty::Predicate::Trait(predicate)) {
+                            let unit_obligation = Obligation {
+                                predicate: ty::Predicate::Trait(predicate),
+                                .. obligation.clone()
+                            };
+                            if self.predicate_may_hold(&unit_obligation) {
                                 err.note("the trait is implemented for `()`. \
                                          Possibly this error has been caused by changes to \
                                          Rust's type-inference algorithm \
@@ -814,6 +818,8 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                 }
                 err.struct_error(self.tcx, span, "constant expression")
             }
+
+            Overflow => bug!() // XXX: report overflow error instead?
         };
         self.note_obligation_cause(&mut err, obligation);
         err.emit();
@@ -1259,7 +1265,13 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                 &cleaned_pred
             ).value;
 
-            self.predicate_may_hold(param_env, cleaned_pred.to_predicate())
+            let obligation = Obligation::new(
+                ObligationCause::dummy(),
+                param_env,
+                cleaned_pred.to_predicate()
+            );
+
+            self.predicate_may_hold(&obligation)
         })
     }
 

@@ -10,19 +10,18 @@
 
 use infer::InferCtxt;
 use infer::canonical::{Canonical, Canonicalize};
-use traits::EvaluationResult;
+use traits::{EvaluationResult, PredicateObligation};
 use traits::query::CanonicalPredicateGoal;
-use ty::{ParamEnv, ParamEnvAnd, Predicate, TyCtxt};
+use ty::{ParamEnvAnd, Predicate, TyCtxt};
 
 impl<'cx, 'gcx, 'tcx> InferCtxt<'cx, 'gcx, 'tcx> {
     /// Evaluates whether the predicate can be satisfied (by any means)
     /// in the given `ParamEnv`.
     pub fn predicate_may_hold(
         &self,
-        param_env: ParamEnv<'tcx>,
-        predicate: Predicate<'tcx>,
+        obligation: &PredicateObligation<'tcx>,
     ) -> bool {
-        self.evaluate_obligation(param_env, predicate).may_apply()
+        self.evaluate_obligation(obligation).may_apply()
     }
 
     /// Evaluates whether the predicate can be satisfied in the given
@@ -30,20 +29,23 @@ impl<'cx, 'gcx, 'tcx> InferCtxt<'cx, 'gcx, 'tcx> {
     /// not entirely accurate if inference variables are involved.
     pub fn predicate_must_hold(
         &self,
-        param_env: ParamEnv<'tcx>,
-        predicate: Predicate<'tcx>,
+        obligation: &PredicateObligation<'tcx>,
     ) -> bool {
-        self.evaluate_obligation(param_env, predicate) == EvaluationResult::EvaluatedToOk
+        self.evaluate_obligation(obligation) == EvaluationResult::EvaluatedToOk
     }
 
     fn evaluate_obligation(
         &self,
-        param_env: ParamEnv<'tcx>,
-        predicate: Predicate<'tcx>,
+        obligation: &PredicateObligation<'tcx>,
     ) -> EvaluationResult {
-        let (c_pred, _) = self.canonicalize_query(&param_env.and(predicate));
+        let param_env_and = obligation.param_env.and(obligation.predicate);
+        let (c_pred, _) = self.canonicalize_query(&param_env_and);
 
-        self.tcx.global_tcx().evaluate_obligation(c_pred)
+        let result = self.tcx.global_tcx().evaluate_obligation(c_pred);
+        if result == EvaluationResult::EvaluatedToOverflow {
+            self.report_overflow_error(obligation, true);
+        }
+        result
     }
 }
 

@@ -120,8 +120,10 @@ impl<'a, 'gcx, 'tcx> Autoderef<'a, 'gcx, 'tcx> {
 
         let cause = traits::ObligationCause::misc(self.span, self.fcx.body_id);
 
-        if !self.fcx.predicate_may_hold(self.fcx.param_env,
-                                        trait_ref.to_predicate()) {
+        let obligation = traits::Obligation::new(cause.clone(),
+                                                 self.fcx.param_env,
+                                                 trait_ref.to_predicate());
+        if !self.fcx.predicate_may_hold(&obligation) {
             debug!("overloaded_deref_ty: cannot match obligation");
             return None;
         }
